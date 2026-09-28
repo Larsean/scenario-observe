@@ -25,6 +25,7 @@
     .node-label { text-align: left; border: 0; background: transparent; }
     .node-toggle { padding: .2rem .4rem; font-size: .75rem; }
     .badge { border-radius: 1rem; padding: .15rem .45rem; background: #263746; color: #bfdbfe; font-size: .72rem; }
+    .task-boundary { border: 1px solid #d29922; color: #f0c674; }
     .status-unwind, .status-incomplete { color: #ffb4a2; }
     .match > .node-header { outline: 2px solid #d29922; border-radius: .35rem; }
     .children[hidden] { display: none; }
@@ -155,6 +156,13 @@
           status.className = `badge status-${first.status}`;
           status.textContent = first.status;
           header.append(status);
+
+          if (first.task_boundary) {
+            const taskBoundary = window.document.createElement("span");
+            taskBoundary.className = "badge task-boundary";
+            taskBoundary.textContent = `Task boundary: ${first.task_id ?? "—"}`;
+            header.append(taskBoundary);
+          }
 
           const filteredCount = group.nodes.reduce((count, node) => count + node.filtered_hops, 0);
           if (filteredCount > 0) {

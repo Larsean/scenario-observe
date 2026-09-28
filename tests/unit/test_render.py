@@ -118,6 +118,51 @@ def test_render_reconstructs_lifecycle_roots_and_incomplete_calls(tmp_path):
     assert nodes["c3"]["status"] == "incomplete"
 
 
+def test_render_preserves_large_integers_losslessly(tmp_path):
+    trace_path = tmp_path / "large-integer.jsonl"
+    output_path = tmp_path / "large-integer.html"
+    value = 9_007_199_254_740_993
+    call = _call("c1", name="large_integer")
+    call["input"] = {"value": value}
+    _write_trace(
+        trace_path,
+        [
+            call,
+            _record("return", call_id="c1", output={"value": value}, duration_ns=1),
+        ],
+    )
+
+    observe.render(trace_path, output_path)
+
+    document, _ = _embedded_document(output_path.read_text(encoding="utf-8"))
+    node = document["roots"][0]
+    assert node["input"]["value"] == str(value)
+    assert node["output"]["value"] == str(value)
+    source_records = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+    assert source_records[0]["input"]["value"] == value
+
+
+def test_render_marks_child_calls_from_another_task(tmp_path):
+    trace_path = tmp_path / "cross-task.jsonl"
+    output_path = tmp_path / "cross-task.html"
+    _write_trace(
+        trace_path,
+        [
+            _call("c1", name="root", task="task-1"),
+            _call("c2", parent="c1", name="child_task", task="task-2"),
+        ],
+    )
+
+    observe.render(trace_path, output_path)
+
+    document, _ = _embedded_document(output_path.read_text(encoding="utf-8"))
+    nodes = {node["call_id"]: node for node in _flatten(document["roots"])}
+    assert nodes["c2"]["task_boundary"] is True
+    html = output_path.read_text(encoding="utf-8")
+    assert "first.task_boundary" in html
+    assert "Task boundary:" in html
+
+
 def test_render_reports_corrupt_tail_and_unknown_schema(tmp_path):
     trace_path = tmp_path / "damaged.jsonl"
     trace_path.write_bytes(

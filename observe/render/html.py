@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 SCHEMA_VERSION = 1
+MAX_SAFE_INTEGER = 9_007_199_254_740_991
 KNOWN_EVENTS = {
     "session_start",
     "call",
@@ -167,6 +168,11 @@ def _build_document(path, records):
             session_status = record.get("status", "unknown")
 
     _validate_parent_graph(path, nodes)
+    for node in nodes.values():
+        parent = nodes.get(node["parent_call_id"])
+        node["task_boundary"] = (
+            parent is not None and parent["task_id"] != node["task_id"]
+        )
     roots = []
     for node in nodes.values():
         parent_id = node["parent_call_id"]
@@ -206,8 +212,23 @@ def _build_document(path, records):
     }
 
 
+def _browser_safe_values(value):
+    if type(value) is int and abs(value) > MAX_SAFE_INTEGER:
+        return str(value)
+    if type(value) is dict:
+        return {key: _browser_safe_values(item) for key, item in value.items()}
+    if type(value) is list:
+        return [_browser_safe_values(item) for item in value]
+    return value
+
+
 def _serialize_document(document):
-    encoded = json.dumps(document, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    encoded = json.dumps(
+        _browser_safe_values(document),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
     return (
         encoded.replace("&", "\\u0026")
         .replace("<", "\\u003c")

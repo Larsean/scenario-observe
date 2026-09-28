@@ -179,35 +179,37 @@ class TraceSession:
             self.callback_failed(error)
 
     def finish(self, status):
-        if not self.started:
-            self.active = False
-            self.frame_states.clear()
-            return
-        try:
-            self.writer.write(self._record("session_end", status=status))
-        except Exception:
-            pass
-        self.active = False
-        self.frame_states.clear()
-
-    def callback_failed(self, error):
-        if self.failed:
-            return
-        self.failed = True
-        self.active = False
-        self.frame_states.clear()
-        LOGICAL_STACK.set(())
-        try:
-            self.writer.write(
-                self._record("trace_error", error_type=type(error).__name__)
-            )
-        except Exception:
-            pass
-        if self.monitoring_scope is not None:
+        with self._state_lock:
+            if not self.started:
+                self.active = False
+                self.frame_states.clear()
+                return
             try:
-                self.monitoring_scope.disable()
+                self.writer.write(self._record("session_end", status=status))
             except Exception:
                 pass
+            self.active = False
+            self.frame_states.clear()
+
+    def callback_failed(self, error):
+        with self._state_lock:
+            if self.failed or not self.active:
+                return
+            self.failed = True
+            self.active = False
+            self.frame_states.clear()
+            LOGICAL_STACK.set(())
+            try:
+                self.writer.write(
+                    self._record("trace_error", error_type=type(error).__name__)
+                )
+            except Exception:
+                pass
+            if self.monitoring_scope is not None:
+                try:
+                    self.monitoring_scope.disable()
+                except Exception:
+                    pass
 
     def _scoped_frame(self, code):
         if not self.is_active_context():

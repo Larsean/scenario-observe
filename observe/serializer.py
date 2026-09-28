@@ -93,7 +93,7 @@ class _Snapshotter:
         max_string_length,
         max_nodes,
     ):
-        self.serializers = dict(serializers or {})
+        self.serializers = tuple((value_type, serializer) for value_type, serializer in (serializers or {}).items())
         self.redact = normalize_redaction_keys(redact or ())
         self.max_depth = max_depth
         self.max_items = max_items
@@ -308,7 +308,14 @@ class _Snapshotter:
             return {"__type__": type_name, "__cycle__": True}
         self.active.add(value_id)
         try:
-            serializer = self.serializers.get(value_type)
+            serializer = next(
+                (
+                    registered_serializer
+                    for registered_type, registered_serializer in self.serializers
+                    if value_type is registered_type
+                ),
+                None,
+            )
             if serializer is not None:
                 try:
                     return self.snapshot(serializer(value), depth + 1)

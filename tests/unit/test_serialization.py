@@ -132,6 +132,29 @@ def test_custom_serializer_accepts_classes_with_custom_metaclasses():
     assert snapshot == {"value": "captured"}
 
 
+def test_snapshot_does_not_hash_an_unregistered_custom_metaclass():
+    class ModelMeta(type):
+        fail_hash = False
+
+        def __hash__(cls):
+            if cls.fail_hash:
+                raise AssertionError("type hashing must not run during snapshots")
+            return type.__hash__(cls)
+
+    class Registered(metaclass=ModelMeta):
+        pass
+
+    class Unregistered(metaclass=ModelMeta):
+        pass
+
+    serializers = {Registered: lambda item: "registered"}
+    Unregistered.fail_hash = True
+
+    snapshot = snapshot_value(Unregistered(), serializers=serializers)
+
+    assert snapshot["__type__"].endswith("Unregistered")
+
+
 def test_trace_applies_redaction_to_inputs_and_outputs(tmp_path):
     import json
 

@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "scenario-observe"
 version = "0.1.0"
 description = "Local Python execution observation traces"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
 
@@ -14,3 +15,6 @@ test = ["pytest>=8"]
 
 [tool.setuptools.packages.find]
 include = ["observe*"]
+
+[tool.setuptools.package-data]
+observe = ["templates/*.html"]

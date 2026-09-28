@@ -10,6 +10,9 @@ import pytest
 
 from observe import trace
 from observe.monitor import MonitoringScope
+from observe.session import ACTIVE_SESSION, TraceSession
+from observe.writer import JsonlWriter
+import observe.session as session_module
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -233,6 +236,64 @@ def test_both_monitor_ids_busy_fails_before_scenario_body(tmp_path):
             monitoring.free_tool_id(tool_id)
 
     assert body_calls == []
+
+
+def test_session_finish_excludes_callback_after_end_write(tmp_path, monkeypatch):
+    output = tmp_path / "callback-finish.jsonl"
+    writer = JsonlWriter(output)
+
+    def scenario():
+        return None
+
+    session = TraceSession(scenario, writer, project_root=PROJECT_ROOT)
+    session.start()
+    end_written = threading.Event()
+    release_finish = threading.Event()
+    callback_started = threading.Event()
+    frame = sys._getframe()
+    monkeypatch.setattr(session_module, "find_frame", lambda code: frame)
+    original_write = writer.write
+
+    def pause_after_session_end(record):
+        written = original_write(record)
+        if record["event"] == "session_end":
+            end_written.set()
+            if not release_finish.wait(2):
+                raise RuntimeError("test session was not released")
+        return written
+
+    monkeypatch.setattr(writer, "write", pause_after_session_end)
+
+    def run_callback():
+        callback_started.set()
+        token = ACTIVE_SESSION.set(session)
+        try:
+            session.on_start(scenario.__code__, 0)
+        finally:
+            ACTIVE_SESSION.reset(token)
+
+    callback_thread = threading.Thread(target=run_callback)
+    def finish_session():
+        session.finish("ok")
+
+    finish_thread = threading.Thread(target=finish_session)
+    finish_thread.start()
+    assert end_written.wait(2)
+    callback_thread.start()
+    assert callback_started.wait(2)
+    callback_thread.join(0.05)
+    callback_completed_after_end = not callback_thread.is_alive()
+    release_finish.set()
+    callback_thread.join(2)
+    finish_thread.join(2)
+    writer.close()
+
+    events = [record["event"] for record in _records(output)]
+    assert not callback_completed_after_end
+    assert not callback_thread.is_alive()
+    assert not finish_thread.is_alive()
+    assert events[-1] == "session_end"
+    assert "call" not in events[events.index("session_end") + 1 :]
 
 
 def test_context_copied_to_other_thread_starts_independent_root(tmp_path):
