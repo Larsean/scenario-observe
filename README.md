@@ -159,7 +159,7 @@ Run the core suite with:
 python -m pytest tests/unit -q
 ```
 
-The Todo FastAPI acceptance fixture additionally needs its pinned test dependencies; see [`tests/integration/todo_fastapi/README.md`](tests/integration/todo_fastapi/README.md). GitHub Actions runs the core suite on CPython 3.12, 3.13, and 3.14. The current local test environment is CPython 3.13.
+The Todo FastAPI acceptance fixture additionally needs its pinned test dependencies; see [`tests/integration/todo_fastapi/README.md`](tests/integration/todo_fastapi/README.md). GitHub Actions runs the core suite on CPython 3.13 and 3.14. The current local test environment is CPython 3.13.
 
 ## Current limits
 
