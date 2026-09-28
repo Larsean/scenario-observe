@@ -23,6 +23,7 @@ def _terminal(records, event, call_id):
 
 def test_s01_create_todo_observes_http_and_repository(run_scenario):
     summary, records, trace_path = run_scenario("create")
+    calls = _calls(records)
     route = _call(records, "routers.todo", "create_todo")
     repository = _call(records, "repositories.todo_repository", "TodoRepository.create")
 
@@ -33,6 +34,15 @@ def test_s01_create_todo_observes_http_and_repository(run_scenario):
     assert route["input"]["todo"]["title"] == "Learn FastAPI"
     assert _terminal(records, "return", route["call_id"])["output"]["title"] == "Learn FastAPI"
     assert _terminal(records, "return", repository["call_id"])["output"]["title"] == "Learn FastAPI"
+    assert all("docstring" in call for call in calls)
+    assert next(call for call in calls if call["docstring"] is not None)["docstring"] == (
+        "Run the project route with its original arguments.\n\n"
+        "Args:\n"
+        "    *args: Positional arguments passed to the route.\n"
+        "    **kwargs: Keyword arguments passed to the route.\n\n"
+        "Returns:\n"
+        "    The route response.\n"
+    )
     assert "scenario-g0-password" not in trace_path.read_text(encoding="utf-8")
 
 

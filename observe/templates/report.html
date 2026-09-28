@@ -15,27 +15,41 @@
     button:hover, button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 1px; }
     #search { min-width: 16rem; flex: 1; }
     #summary { color: #aab9c7; font-size: .85rem; }
-    main { display: grid; grid-template-columns: minmax(18rem, 1.2fr) minmax(18rem, .8fr); gap: 1rem; padding: 1rem; }
+    .report-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(15rem, 21rem); gap: 1rem; padding: 1rem; align-items: start; }
     section { min-width: 0; }
     h2 { margin: .2rem 0 .75rem; font-size: 1rem; }
+    #details-panel { min-width: 0; }
+    #execution-sidebar { min-width: 0; position: sticky; top: 6rem; max-height: calc(100vh - 7rem); overflow: auto; }
+    #tree-sidebar { border: 1px solid #394a59; border-radius: .5rem; overflow: hidden; }
+    #tree-sidebar > summary { cursor: pointer; padding: .7rem .8rem; background: #182430; color: #e6edf3; font-weight: 600; }
+    #tree-sidebar[open] > summary { border-bottom: 1px solid #394a59; }
+    .sidebar-controls { display: flex; gap: .4rem; padding: .55rem; }
+    .sidebar-controls button { flex: 1; padding: .3rem; font-size: .75rem; }
     .root-group { margin-bottom: 1rem; border: 1px solid #394a59; border-radius: .5rem; overflow: hidden; }
     .root-heading { margin: 0; padding: .55rem .75rem; background: #182430; color: #aab9c7; font-size: .8rem; }
     .node { margin: .3rem 0 .3rem .7rem; border-left: 1px solid #394a59; padding-left: .45rem; }
     .node-header { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
-    .node-label { text-align: left; border: 0; background: transparent; }
+    .node.selected > .node-header { outline: 2px solid #58a6ff; border-radius: .35rem; }
+    .node-label { min-width: 0; max-width: 100%; flex: 1 1 auto; white-space: normal; overflow-wrap: anywhere; text-align: left; border: 0; background: transparent; }
     .node-toggle { padding: .2rem .4rem; font-size: .75rem; }
     .badge { border-radius: 1rem; padding: .15rem .45rem; background: #263746; color: #bfdbfe; font-size: .72rem; }
     .task-boundary { border: 1px solid #d29922; color: #f0c674; }
     .status-unwind, .status-incomplete { color: #ffb4a2; }
     .match > .node-header { outline: 2px solid #d29922; border-radius: .35rem; }
     .children[hidden] { display: none; }
-    #details { position: sticky; top: 6rem; align-self: start; max-height: calc(100vh - 8rem); overflow: auto; }
     #detail-content { overflow-wrap: anywhere; }
     .detail-section { margin: .6rem 0; }
     .detail-section h3 { margin: .3rem 0; color: #aab9c7; font-size: .8rem; }
     .detail-section pre { margin: 0; padding: .65rem; overflow: auto; white-space: pre-wrap; background: #182430; border-radius: .35rem; }
+    .structured-value { padding: .55rem .65rem; border: 1px solid #394a59; background: #182430; border-radius: .35rem; }
+    .value-list { display: grid; gap: 0; margin: 0; }
+    .value-row { display: grid; grid-template-columns: minmax(6rem, 1fr) minmax(0, 2fr); gap: .6rem; align-items: start; padding: .4rem .1rem; border-bottom: 1px solid #394a59; }
+    .value-row:last-child { border-bottom: 0; }
+    .value-row dt { color: #aab9c7; overflow-wrap: anywhere; }
+    .value-row dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+    .value-scalar { white-space: pre-wrap; overflow-wrap: anywhere; }
     .empty { color: #aab9c7; padding: .5rem; }
-    @media (max-width: 800px) { main { grid-template-columns: 1fr; } #details { position: static; max-height: none; } }
+    @media (max-width: 800px) { .report-layout { grid-template-columns: 1fr; } #execution-sidebar { position: static; max-height: none; } }
   </style>
 </head>
 <body>
@@ -44,20 +58,24 @@
     <div class="toolbar">
       <label for="search">Search calls</label>
       <input id="search" type="search" autocomplete="off" placeholder="Module, function, source, input…">
-      <button id="expand-all" type="button">Expand all</button>
-      <button id="collapse-all" type="button">Collapse all</button>
       <span id="summary"></span>
     </div>
   </header>
-  <main>
-    <section aria-labelledby="tree-title">
-      <h2 id="tree-title">Execution tree</h2>
-      <div id="execution-tree"></div>
+  <main class="report-layout">
+    <section id="details-panel" aria-labelledby="details-title">
+      <h2 id="details-title">Node detail</h2>
+      <div id="detail-content" class="empty">Select a call in the execution tree to inspect its details.</div>
     </section>
-    <section id="details" aria-labelledby="details-title">
-      <h2 id="details-title">Node details</h2>
-      <div id="detail-content" class="empty">Select a call to inspect its input, output, duration, and exception.</div>
-    </section>
+    <aside id="execution-sidebar" aria-label="Execution tree">
+      <details id="tree-sidebar" open>
+        <summary>Execution tree</summary>
+        <div class="sidebar-controls">
+          <button id="expand-all" type="button">Expand all</button>
+          <button id="collapse-all" type="button">Collapse all</button>
+        </div>
+        <div id="execution-tree"></div>
+      </details>
+    </aside>
   </main>
   <script id="trace-data" type="application/json">{{TRACE_DATA}}</script>
   <script>
@@ -69,6 +87,9 @@
       const summary = document.getElementById("summary");
       const rootsById = new Map();
       const allNodes = [];
+      const MAX_VALUE_DEPTH = 1;
+      let firstSelection = null;
+      let selectedTreeNode = null;
 
       function indexNodes(nodes) {
         for (const node of nodes) {
@@ -102,34 +123,91 @@
         ])).join("\n").toLowerCase();
       }
 
-      function appendDetailSection(parent, title, value) {
+      function appendStructuredValue(parent, value, depth = 0) {
+        if (value !== null && typeof value === "object" && depth <= MAX_VALUE_DEPTH) {
+          const entries = Array.isArray(value)
+            ? value.map((item, index) => [String(index), item])
+            : Object.entries(value);
+          if (entries.length === 0) {
+            const emptyValue = window.document.createElement("code");
+            emptyValue.className = "value-scalar";
+            emptyValue.textContent = Array.isArray(value) ? "[]" : "{}";
+            parent.append(emptyValue);
+            return;
+          }
+          const list = window.document.createElement("dl");
+          list.className = "value-list";
+          for (const [key, item] of entries) {
+            const row = window.document.createElement("div");
+            row.className = "value-row";
+            const term = window.document.createElement("dt");
+            term.textContent = Array.isArray(value) ? `[${key}]` : key;
+            const description = window.document.createElement("dd");
+            appendStructuredValue(description, item, depth + 1);
+            row.append(term, description);
+            list.append(row);
+          }
+          parent.append(list);
+          return;
+        }
+        const scalar = window.document.createElement("code");
+        scalar.className = "value-scalar";
+        scalar.textContent = typeof value === "string"
+          ? value
+          : JSON.stringify(value) ?? String(value);
+        parent.append(scalar);
+      }
+
+      function appendStructuredDetailSection(parent, title, value) {
+        const section = window.document.createElement("section");
+        section.className = "detail-section";
+        const heading = window.document.createElement("h3");
+        heading.textContent = title;
+        const content = window.document.createElement("div");
+        content.className = "structured-value";
+        appendStructuredValue(content, value);
+        section.append(heading, content);
+        parent.append(section);
+      }
+
+      function appendTextDetailSection(parent, title, value) {
         const section = window.document.createElement("section");
         section.className = "detail-section";
         const heading = window.document.createElement("h3");
         heading.textContent = title;
         const content = window.document.createElement("pre");
-        content.textContent = JSON.stringify(value, null, 2);
+        content.textContent = value;
         section.append(heading, content);
         parent.append(section);
       }
 
-      function showDetails(group) {
+      function showDetails(group, treeNode) {
+        if (selectedTreeNode) {
+          selectedTreeNode.classList.remove("selected");
+        }
+        selectedTreeNode = treeNode;
+        if (selectedTreeNode) {
+          selectedTreeNode.classList.add("selected");
+        }
         details.replaceChildren();
         details.className = "";
         for (const node of group.nodes) {
           const heading = window.document.createElement("h3");
           heading.textContent = `${callName(node)} · ${node.status}`;
           details.append(heading);
-          appendDetailSection(details, "Source", node.source);
-          appendDetailSection(details, "Input", node.input);
+          appendStructuredDetailSection(details, "Source", node.source);
+          if (typeof node.docstring === "string") {
+            appendTextDetailSection(details, "Docstring", node.docstring);
+          }
+          appendStructuredDetailSection(details, "Input", node.input);
           if (node.status === "return") {
-            appendDetailSection(details, "Output", node.output);
-            appendDetailSection(details, "Duration (ns)", node.duration_ns);
+            appendStructuredDetailSection(details, "Output", node.output);
+            appendStructuredDetailSection(details, "Duration (ns)", node.duration_ns);
           }
           if (node.exception !== null) {
-            appendDetailSection(details, "Exception", node.exception);
+            appendStructuredDetailSection(details, "Exception", node.exception);
           }
-          appendDetailSection(details, "Thread / task", {
+          appendStructuredDetailSection(details, "Thread / task", {
             thread_id: node.thread_id,
             task_id: node.task_id,
             filtered_hops: node.filtered_hops,
@@ -149,7 +227,7 @@
           select.type = "button";
           select.className = "node-label";
           select.textContent = callName(first) + (group.nodes.length > 1 ? ` ×${group.nodes.length}` : "");
-          select.addEventListener("click", () => showDetails(group));
+          select.addEventListener("click", () => showDetails(group, wrapper));
           header.append(select);
 
           const status = window.document.createElement("span");
@@ -195,6 +273,9 @@
             wrapper.append(children);
             appendTree(children, childNodes);
           }
+          if (firstSelection === null) {
+            firstSelection = { group, wrapper };
+          }
           parent.append(wrapper);
         }
       }
@@ -226,6 +307,8 @@
 
       if (allNodes.length === 0) {
         tree.textContent = "No calls were recorded.";
+      } else if (firstSelection !== null) {
+        showDetails(firstSelection.group, firstSelection.wrapper);
       }
       const truncationSummary = documentData.truncated
         ? ` · truncated: ${documentData.truncations.map((item) => item.reason).join(", ")}`

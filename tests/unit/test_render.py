@@ -1,6 +1,7 @@
 import json
 from html.parser import HTMLParser
 from pathlib import Path
+import re
 
 import pytest
 
@@ -111,11 +112,89 @@ def test_render_reconstructs_lifecycle_roots_and_incomplete_calls(tmp_path):
     assert groups[(101, "task-1")]["root_call_ids"] == ["c1"]
     assert nodes["c1"]["status"] == "unwind"
     assert nodes["c1"]["exception"]["type"] == "ValueError"
+    assert nodes["c1"]["docstring"] is None
     assert nodes["c2"]["status"] == "return"
     assert nodes["c2"]["output"] == {"ok": True}
     assert nodes["c2"]["filtered_hops"] == 2
     assert groups[(202, None)]["root_call_ids"] == ["c3"]
     assert nodes["c3"]["status"] == "incomplete"
+
+
+def test_render_preserves_docstring_text_in_call_details(tmp_path):
+    trace_path = tmp_path / "docstring.jsonl"
+    output_path = tmp_path / "docstring.html"
+    docstring = (
+        "Create a todo.\n\n"
+        "    Args:\n"
+        "        title: <script>not executable</script> & keep as text.\n\n"
+        "    Returns:\n"
+        "        The created todo.\n"
+    )
+    _write_trace(
+        trace_path,
+        [
+            _call("c1", name="create_todo", docstring=docstring),
+            _record("return", call_id="c1", output={"id": 1}, duration_ns=1),
+        ],
+    )
+
+    observe.render(trace_path, output_path)
+
+    html = output_path.read_text(encoding="utf-8")
+    document, _ = _embedded_document(html)
+    node = document["roots"][0]
+    assert node["docstring"] == docstring
+    assert r"\u003cscript\u003enot executable\u003c/script\u003e \u0026" in html
+    assert 'appendTextDetailSection(details, "Docstring", node.docstring)' in html
+    assert "content.textContent = value;" in html
+
+
+def test_render_prioritizes_node_details_and_shallowly_formats_values(tmp_path):
+    trace_path = tmp_path / "readable-details.jsonl"
+    output_path = tmp_path / "readable-details.html"
+    input_value = {
+        "todo": {"title": "Learn FastAPI", "metadata": {"private": True}},
+        "limit": 1,
+    }
+    output_value = {
+        "items": [{"id": 1, "title": "Learn FastAPI"}],
+        "total": 1,
+    }
+    call = _call("c1", name="create_todo")
+    call["input"] = input_value
+    _write_trace(
+        trace_path,
+        [
+            call,
+            _record("return", call_id="c1", output=output_value, duration_ns=1),
+        ],
+    )
+
+    observe.render(trace_path, output_path)
+
+    html = output_path.read_text(encoding="utf-8")
+    document, _ = _embedded_document(html)
+    node = document["roots"][0]
+
+    assert node["input"] == input_value
+    assert node["output"] == output_value
+    assert html.index('<section id="details-panel"') < html.index('<aside id="execution-sidebar"')
+    assert '<details id="tree-sidebar" open>' in html
+    style = html.split("<style>", 1)[1].split("</style>", 1)[0]
+    node_label_rule = re.search(r"\.node-label\s*\{([^}]*)\}", style).group(1)
+    structured_value_rule = re.search(r"\.structured-value\s*\{([^}]*)\}", style).group(1)
+    value_row_rule = re.search(r"\.value-row\s*\{([^}]*)\}", style).group(1)
+    assert "min-width: 0;" in node_label_rule
+    assert "white-space: normal;" in node_label_rule
+    assert "overflow-wrap: anywhere;" in node_label_rule
+    assert "border: 1px solid #394a59;" in structured_value_rule
+    assert "border-bottom: 1px solid #394a59;" in value_row_rule
+    assert "function appendStructuredValue(parent, value, depth = 0)" in html
+    assert "const MAX_VALUE_DEPTH = 1;" in html
+    assert "depth <= MAX_VALUE_DEPTH" in html
+    assert 'appendStructuredDetailSection(details, "Input", node.input);' in html
+    assert 'appendStructuredDetailSection(details, "Output", node.output);' in html
+    assert "showDetails(firstSelection.group, firstSelection.wrapper);" in html
 
 
 def test_render_preserves_large_integers_losslessly(tmp_path):

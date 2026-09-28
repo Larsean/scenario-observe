@@ -66,6 +66,9 @@ def _call_node(path, line_number, record):
         symbol.get("qualname"), str
     ):
         raise TraceFormatError(f"{path}:{line_number}: call record has no valid symbol")
+    docstring = record.get("docstring")
+    if docstring is not None and not isinstance(docstring, str):
+        raise TraceFormatError(f"{path}:{line_number}: docstring must be a string or null")
     source = record.get("source")
     if type(source) is not dict:
         source = {}
@@ -83,6 +86,7 @@ def _call_node(path, line_number, record):
         "parent_call_id": parent_call_id,
         "symbol": symbol,
         "source": source,
+        "docstring": docstring,
         "input": record.get("input"),
         "output": None,
         "duration_ns": None,

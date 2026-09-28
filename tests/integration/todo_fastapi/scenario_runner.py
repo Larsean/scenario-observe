@@ -1,4 +1,5 @@
 import json
+from functools import wraps
 import os
 from pathlib import Path
 import sys
@@ -22,6 +23,23 @@ from serializers import TODO_SERIALIZERS
 
 
 PASSWORD = "scenario-g0-password"
+
+
+def _documented_route_wrapper(endpoint):
+    @wraps(endpoint)
+    def wrapper(*args, **kwargs):
+        """Run the project route with its original arguments.
+
+        Args:
+            *args: Positional arguments passed to the route.
+            **kwargs: Keyword arguments passed to the route.
+
+        Returns:
+            The route response.
+        """
+        return endpoint(*args, **kwargs)
+
+    return wrapper
 
 
 def _register_and_login(client):
@@ -56,11 +74,15 @@ def _observe_route(path, method):
     original = route.endpoint
     route.endpoint = trace(
         output=TRACE_PATH,
-        include=["routers.todo.*", "repositories.todo_repository.*"],
+        include=[
+            "routers.todo.*",
+            "repositories.todo_repository.*",
+            "__main__._documented_route_wrapper.*",
+        ],
         project_root=TODO_ROOT,
         serializers=TODO_SERIALIZERS,
         redact=["authorization", "password", "token"],
-    )(original)
+    )(_documented_route_wrapper(original))
     route.dependant.call = route.endpoint
     return route, original
 

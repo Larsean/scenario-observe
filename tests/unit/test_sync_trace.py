@@ -23,6 +23,22 @@ def _calls(records, suffix):
     ]
 
 
+def _test_project_function(value):
+    return value
+
+
+def _documented_project_wrapper(value):
+    """Wrap a project function with a raw Google-style docstring.
+
+    Args:
+        value: The value passed to the project helper.
+
+    Returns:
+        The value returned by the project helper.
+    """
+    return _test_project_function(value)
+
+
 def test_sync_trace_writes_schema_arguments_and_return(tmp_path):
     output = tmp_path / "nested" / "trace.jsonl"
 
@@ -56,6 +72,42 @@ def test_sync_trace_writes_schema_arguments_and_return(tmp_path):
         assert isinstance(record["process_id"], int)
         assert isinstance(record["thread_id"], int)
         assert record["task_id"] is None
+
+
+def test_sync_trace_preserves_docstring_for_every_call(tmp_path):
+    output = tmp_path / "docstring-trace.jsonl"
+
+    @trace(
+        output=output,
+        project_root=PROJECT_ROOT,
+        include=[f"{__name__}.*"],
+    )
+    def scenario():
+        return _documented_project_wrapper({"count": 2})
+
+    assert scenario() == {"count": 2}
+    calls = [record for record in _read_records(output) if record["event"] == "call"]
+    documented_call = next(
+        record
+        for record in calls
+        if record["symbol"]["qualname"].endswith("_documented_project_wrapper")
+    )
+    project_call = next(
+        record
+        for record in calls
+        if record["symbol"]["qualname"].endswith("_test_project_function")
+    )
+
+    assert documented_call["docstring"] == _documented_project_wrapper.__doc__
+    assert documented_call["docstring"] == (
+        "Wrap a project function with a raw Google-style docstring.\n\n"
+        "Args:\n"
+        "    value: The value passed to the project helper.\n\n"
+        "Returns:\n"
+        "    The value returned by the project helper.\n"
+    )
+    assert all("docstring" in record for record in calls)
+    assert project_call["docstring"] is None
 
 
 def test_nested_and_recursive_calls_keep_call_tree(tmp_path):

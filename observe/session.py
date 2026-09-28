@@ -265,12 +265,16 @@ class TraceSession:
                 self._truncate("max_calls")
                 return
             call_id = f"c{next(self.call_ids)}"
+            docstring = frame.f_code.co_consts[0] if frame.f_code.co_consts else None
+            if not isinstance(docstring, str):
+                docstring = None
             record = self._record(
                 "call",
                 call_id=call_id,
                 parent_call_id=parent_call_id,
                 symbol={"module": symbol["module"], "qualname": symbol["qualname"]},
                 source={"file": symbol["file"], "line": symbol["line"]},
+                docstring=docstring,
                 input=argument_snapshot(frame, **self.serialization_options),
                 depth=depth,
                 **({"filtered_hops": filtered_hops} if filtered_hops else {}),

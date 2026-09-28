@@ -4,7 +4,29 @@
 
 ## Install
 
-From a checkout, install the package and its test extra with either:
+Requires CPython 3.12 or newer. The distribution name is `scenario-observe`; import it as `observe`.
+
+Clone the repository and install it into the active environment:
+
+```bash
+git clone https://github.com/<owner>/<repo>.git
+cd <repo>
+python -m pip install .
+```
+
+Or install directly from GitHub:
+
+```bash
+python -m pip install "git+https://github.com/<owner>/<repo>.git"
+```
+
+Then import the public API:
+
+```python
+from observe import render, trace
+```
+
+For local development, install the package in editable mode with its test extra:
 
 ```bash
 python -m pip install -e ".[test]"
@@ -12,11 +34,22 @@ python -m pip install -e ".[test]"
 uv pip install -e ".[test]"
 ```
 
-The test extra contains pytest only. Setuptools is a build-time requirement, not a runtime dependency.
+The test extra contains pytest only. Setuptools is a build-time requirement, not a runtime dependency. Package metadata and build configuration live in `pyproject.toml`; a separate `setup.py` is not required.
+
+Build distributable files locally with:
+
+```bash
+python -m pip install build
+python -m build
+```
+
+This creates a wheel and source archive under `dist/`. Publishing a GitHub Release with a `v`-prefixed tag matching the version in `pyproject.toml` automatically builds and attaches both files to that release.
 
 ## Record and render
 
 Decorate a synchronous or asynchronous scenario. By default, `trace` writes `.observe/trace.jsonl` and observes Python code under the current project directory. `include` can add symbols outside that directory; `exclude` takes precedence over both explicit includes and the default project scope.
+
+Each recorded call includes its function's raw `docstring` (or `null` when absent). The HTML report shows it verbatim in the selected call's details; Google-style sections are not parsed or reformatted.
 
 ```python
 from observe import render, trace
