@@ -21,3 +21,7 @@ Run the existing test suite with its working directory set to a fresh temporary 
 ```
 
 The G0 command, working directory, runtime version, package exception and baseline result belong in `plans/evidence/monitoring-spikes.md`.
+
+## Warning and artifact policy
+
+The root `pytest.ini` filters only the known Pydantic configuration and `datetime.utcnow()` deprecation warnings emitted by this legacy fixture and SQLAlchemy. Other warnings remain visible. Root `.gitignore` excludes generated JSONL traces, local databases, logs, caches and virtual environments; do not force-add runtime traces or temporary test data.
