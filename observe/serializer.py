@@ -359,7 +359,7 @@ def validate_serialization_options(options):
     if serializers is not None and type(serializers) is not dict:
         raise ValueError("serializers must be a dictionary of types to callables")
     if serializers is not None and any(
-        type(value_type) is not type or not callable(serializer)
+        not isinstance(value_type, type) or not callable(serializer)
         for value_type, serializer in serializers.items()
     ):
         raise ValueError("serializers must map types to callables")

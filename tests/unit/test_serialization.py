@@ -116,6 +116,22 @@ def test_custom_serializer_and_recursive_redaction():
     assert snapshot["nested"][0]["Password"] == "<redacted>"
 
 
+def test_custom_serializer_accepts_classes_with_custom_metaclasses():
+    class ModelMeta(type):
+        pass
+
+    class Model(metaclass=ModelMeta):
+        def __init__(self, value):
+            self.value = value
+
+    snapshot = snapshot_value(
+        Model("captured"),
+        serializers={Model: lambda item: {"value": item.value}},
+    )
+
+    assert snapshot == {"value": "captured"}
+
+
 def test_trace_applies_redaction_to_inputs_and_outputs(tmp_path):
     import json
 
