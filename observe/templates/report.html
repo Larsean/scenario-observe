@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scenario observation</title>
+  <style>
+    :root { color-scheme: light dark; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    body { margin: 0; background: #101820; color: #e6edf3; }
+    header { position: sticky; top: 0; z-index: 2; padding: 1rem; background: #182430; border-bottom: 1px solid #394a59; }
+    h1 { margin: 0 0 .75rem; font-size: 1.2rem; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+    input, button { font: inherit; color: inherit; background: #101820; border: 1px solid #617587; border-radius: .35rem; padding: .45rem .65rem; }
+    button { cursor: pointer; }
+    button:hover, button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 1px; }
+    #search { min-width: 16rem; flex: 1; }
+    #summary { color: #aab9c7; font-size: .85rem; }
+    main { display: grid; grid-template-columns: minmax(18rem, 1.2fr) minmax(18rem, .8fr); gap: 1rem; padding: 1rem; }
+    section { min-width: 0; }
+    h2 { margin: .2rem 0 .75rem; font-size: 1rem; }
+    .root-group { margin-bottom: 1rem; border: 1px solid #394a59; border-radius: .5rem; overflow: hidden; }
+    .root-heading { margin: 0; padding: .55rem .75rem; background: #182430; color: #aab9c7; font-size: .8rem; }
+    .node { margin: .3rem 0 .3rem .7rem; border-left: 1px solid #394a59; padding-left: .45rem; }
+    .node-header { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+    .node-label { text-align: left; border: 0; background: transparent; }
+    .node-toggle { padding: .2rem .4rem; font-size: .75rem; }
+    .badge { border-radius: 1rem; padding: .15rem .45rem; background: #263746; color: #bfdbfe; font-size: .72rem; }
+    .status-unwind, .status-incomplete { color: #ffb4a2; }
+    .match > .node-header { outline: 2px solid #d29922; border-radius: .35rem; }
+    .children[hidden] { display: none; }
+    #details { position: sticky; top: 6rem; align-self: start; max-height: calc(100vh - 8rem); overflow: auto; }
+    #detail-content { overflow-wrap: anywhere; }
+    .detail-section { margin: .6rem 0; }
+    .detail-section h3 { margin: .3rem 0; color: #aab9c7; font-size: .8rem; }
+    .detail-section pre { margin: 0; padding: .65rem; overflow: auto; white-space: pre-wrap; background: #182430; border-radius: .35rem; }
+    .empty { color: #aab9c7; padding: .5rem; }
+    @media (max-width: 800px) { main { grid-template-columns: 1fr; } #details { position: static; max-height: none; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Scenario observation</h1>
+    <div class="toolbar">
+      <label for="search">Search calls</label>
+      <input id="search" type="search" autocomplete="off" placeholder="Module, function, source, input…">
+      <button id="expand-all" type="button">Expand all</button>
+      <button id="collapse-all" type="button">Collapse all</button>
+      <span id="summary"></span>
+    </div>
+  </header>
+  <main>
+    <section aria-labelledby="tree-title">
+      <h2 id="tree-title">Execution tree</h2>
+      <div id="execution-tree"></div>
+    </section>
+    <section id="details" aria-labelledby="details-title">
+      <h2 id="details-title">Node details</h2>
+      <div id="detail-content" class="empty">Select a call to inspect its input, output, duration, and exception.</div>
+    </section>
+  </main>
+  <script id="trace-data" type="application/json">{{TRACE_DATA}}</script>
+  <script>
+    (() => {
+      const documentData = JSON.parse(document.getElementById("trace-data").textContent);
+      const tree = document.getElementById("execution-tree");
+      const search = document.getElementById("search");
+      const details = document.getElementById("detail-content");
+      const summary = document.getElementById("summary");
+      const rootsById = new Map();
+      const allNodes = [];
+
+      function indexNodes(nodes) {
+        for (const node of nodes) {
+          rootsById.set(node.call_id, node);
+          allNodes.push(node);
+          indexNodes(node.children);
+        }
+      }
+
+      function callName(node) {
+        return `${node.symbol.module}.${node.symbol.qualname}`;
+      }
+
+      function foldSiblings(nodes) {
+        const groups = [];
+        for (const node of nodes) {
+          const key = JSON.stringify([callName(node), node.thread_id, node.task_id, node.status]);
+          const previous = groups[groups.length - 1];
+          if (previous && previous.key === key) {
+            previous.nodes.push(node);
+          } else {
+            groups.push({ key, nodes: [node] });
+          }
+        }
+        return groups;
+      }
+
+      function nodeSearchText(group) {
+        return group.nodes.map((node) => JSON.stringify([
+          node.symbol, node.source, node.input, node.output, node.exception,
+        ])).join("\n").toLowerCase();
+      }
+
+      function appendDetailSection(parent, title, value) {
+        const section = window.document.createElement("section");
+        section.className = "detail-section";
+        const heading = window.document.createElement("h3");
+        heading.textContent = title;
+        const content = window.document.createElement("pre");
+        content.textContent = JSON.stringify(value, null, 2);
+        section.append(heading, content);
+        parent.append(section);
+      }
+
+      function showDetails(group) {
+        details.replaceChildren();
+        details.className = "";
+        for (const node of group.nodes) {
+          const heading = window.document.createElement("h3");
+          heading.textContent = `${callName(node)} · ${node.status}`;
+          details.append(heading);
+          appendDetailSection(details, "Source", node.source);
+          appendDetailSection(details, "Input", node.input);
+          if (node.status === "return") {
+            appendDetailSection(details, "Output", node.output);
+            appendDetailSection(details, "Duration (ns)", node.duration_ns);
+          }
+          if (node.exception !== null) {
+            appendDetailSection(details, "Exception", node.exception);
+          }
+          appendDetailSection(details, "Thread / task", {
+            thread_id: node.thread_id,
+            task_id: node.task_id,
+            filtered_hops: node.filtered_hops,
+          });
+        }
+      }
+
+      function appendTree(parent, nodes) {
+        for (const group of foldSiblings(nodes)) {
+          const first = group.nodes[0];
+          const wrapper = window.document.createElement("div");
+          wrapper.className = "node";
+          wrapper._searchText = nodeSearchText(group);
+          const header = window.document.createElement("div");
+          header.className = "node-header";
+          const select = window.document.createElement("button");
+          select.type = "button";
+          select.className = "node-label";
+          select.textContent = callName(first) + (group.nodes.length > 1 ? ` ×${group.nodes.length}` : "");
+          select.addEventListener("click", () => showDetails(group));
+          header.append(select);
+
+          const status = window.document.createElement("span");
+          status.className = `badge status-${first.status}`;
+          status.textContent = first.status;
+          header.append(status);
+
+          const filteredCount = group.nodes.reduce((count, node) => count + node.filtered_hops, 0);
+          if (filteredCount > 0) {
+            const filtered = window.document.createElement("span");
+            filtered.className = "badge";
+            filtered.textContent = `⋯ ${filteredCount} filtered calls`;
+            header.append(filtered);
+          }
+
+          const childNodes = group.nodes.flatMap((node) => node.children);
+          let children;
+          if (childNodes.length > 0) {
+            const toggle = window.document.createElement("button");
+            toggle.type = "button";
+            toggle.className = "node-toggle";
+            toggle.textContent = "Collapse";
+            toggle.setAttribute("aria-expanded", "true");
+            children = window.document.createElement("div");
+            children.className = "children";
+            toggle.addEventListener("click", () => {
+              children.hidden = !children.hidden;
+              toggle.textContent = children.hidden ? "Expand" : "Collapse";
+              toggle.setAttribute("aria-expanded", String(!children.hidden));
+            });
+            header.append(toggle);
+          }
+
+          wrapper.append(header);
+          if (children) {
+            wrapper.append(children);
+            appendTree(children, childNodes);
+          }
+          parent.append(wrapper);
+        }
+      }
+
+      function setAllCollapsed(collapsed) {
+        for (const container of tree.querySelectorAll(".children")) {
+          container.hidden = collapsed;
+          const toggle = container.previousElementSibling.querySelector(".node-toggle");
+          toggle.textContent = collapsed ? "Expand" : "Collapse";
+          toggle.setAttribute("aria-expanded", String(!collapsed));
+        }
+      }
+
+      indexNodes(documentData.roots);
+      const rootGroups = new Map(documentData.root_groups.map((group) => [
+        JSON.stringify([group.thread_id, group.task_id]), group,
+      ]));
+      for (const group of rootGroups.values()) {
+        const section = window.document.createElement("section");
+        section.className = "root-group";
+        const heading = window.document.createElement("h3");
+        heading.className = "root-heading";
+        heading.textContent = `Thread ${group.thread_id ?? "?"} · Task ${group.task_id ?? "—"}`;
+        const rootContainer = window.document.createElement("div");
+        appendTree(rootContainer, group.root_call_ids.map((callId) => rootsById.get(callId)).filter(Boolean));
+        section.append(heading, rootContainer);
+        tree.append(section);
+      }
+
+      if (allNodes.length === 0) {
+        tree.textContent = "No calls were recorded.";
+      }
+      const truncationSummary = documentData.truncated
+        ? ` · truncated: ${documentData.truncations.map((item) => item.reason).join(", ")}`
+        : "";
+      summary.textContent = `${allNodes.length} calls · ${documentData.status}${truncationSummary}`;
+      search.addEventListener("input", () => {
+        const query = search.value.trim().toLowerCase();
+        for (const node of tree.querySelectorAll(".node")) {
+          node.classList.toggle("match", Boolean(query) && node._searchText.includes(query));
+        }
+      });
+      document.getElementById("expand-all").addEventListener("click", () => setAllCollapsed(false));
+      document.getElementById("collapse-all").addEventListener("click", () => setAllCollapsed(true));
+    })();
+  </script>
+</body>
+</html>
