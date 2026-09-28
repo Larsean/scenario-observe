@@ -1,6 +1,81 @@
-# scenario-observe
+# Scenario Observe
 
-`scenario-observe` records bounded Python call inputs, returns, and exceptions as local JSONL evidence, then renders that evidence into a self-contained HTML report. It targets CPython 3.12 and newer and has no runtime dependencies.
+**See what your Python scenario actually does.**
+
+Capture function inputs, returns, and exceptions, then explore the call tree in a searchable, offline HTML report. Scenario Observe helps you understand how data moves through a Python workflow and keep execution evidence alongside your tests.
+
+The package is distributed as `scenario-observe` and imported as `observe`. It targets CPython 3.12 and newer and has **zero runtime dependencies**.
+
+## Why Scenario Observe?
+
+When a scenario crosses several functions, its final result only tells part of the story. Scenario Observe records the calls within a selected execution scope so you can inspect the inputs, intermediate returns, and exceptions that explain that result.
+
+- **Understand a workflow:** follow the call tree from a scenario entry point into the functions it invokes.
+- **Investigate failures:** inspect recorded exceptions and the call inputs around a failing path.
+- **Keep test evidence:** save local JSONL traces and render them into reports you can revisit after the run.
+- **Explore unfamiliar code:** read a function's docstring beside its observed inputs and outputs.
+
+## Highlights
+
+| Capability | What you get |
+| --- | --- |
+| Synchronous and asynchronous scenarios | Trace a regular function or coroutine with the same `@trace` API. |
+| Interactive call tree | Expand calls, select their details, and highlight search matches in the HTML report. |
+| Inputs, returns, and exceptions | Inspect recorded values at each observed Python call. |
+| Offline reports | Open a self-contained HTML file without a report server or internet connection. |
+| Focused tracing | Include or exclude symbols to control which calls appear. |
+| Bounded capture | Configure call depth, call count, trace size, and value snapshot limits. |
+| Field-name redaction | Mask configured keys in captured data before writing the trace. |
+
+## Quick start
+
+After [installing the package](#install), save this example as `checkout_demo.py` in your project directory:
+
+```python
+from observe import render, trace
+
+
+def subtotal(items):
+    """Calculate the total price before discounts."""
+    return sum(item["price"] * item["quantity"] for item in items)
+
+
+def apply_discount(amount, discount_rate):
+    """Apply a fractional discount to the subtotal."""
+    return round(amount * (1 - discount_rate), 2)
+
+
+@trace(output=".observe/checkout.jsonl", redact=["email"])
+def checkout_scenario():
+    items = [{"price": 25, "quantity": 2}, {"price": 10, "quantity": 1}]
+    amount = subtotal(items)
+    total = apply_discount(amount, discount_rate=0.1)
+    return {"total": total, "email": "customer@example.com"}
+
+
+result = checkout_scenario()
+report = render(".observe/checkout.jsonl", ".observe/checkout.html")
+print(f"Total: {result['total']}")
+print(f"Report: {report}")
+```
+
+Run it with:
+
+```bash
+python checkout_demo.py
+```
+
+Open `.observe/checkout.html` in your browser. Select `subtotal` to inspect its input items and return value of `60`, then select `apply_discount` to see how the total becomes `54.0`. The scenario's recorded return masks `email`; its actual Python return value remains unchanged.
+
+The report contains the observed Python calls, including this flow:
+
+```text
+checkout_scenario
+├── subtotal → 60
+└── apply_discount → 54.0
+```
+
+Use the search box to highlight matching calls and the call details to inspect captured values and docstrings. Keep the JSONL file when you want to regenerate the report later.
 
 ## Install
 
