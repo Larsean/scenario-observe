@@ -9,7 +9,7 @@ git clone https://github.com/datwquant/todo-fastapi.git todo-fastapi
 git -C todo-fastapi checkout 34bf3890ae1b757d24d8576640f93e947653728f
 ```
 
-The pinned fixture revision is recorded in `plans/evidence/monitoring-spikes.md`. Do not update it implicitly when reproducing the tests.
+The checkout command above pins the fixture revision used by the acceptance tests. Do not update it implicitly when reproducing the tests.
 
 ## Python 3.13 environment
 
@@ -37,7 +37,7 @@ python -m pytest tests/integration/todo_fastapi -q
 
 Each scenario creates its own temporary SQLite database, JSONL trace, and HTML report. The tests start a separate Python process for the fixture so its top-level imports do not affect the root test process.
 
-The G0 command, working directory, runtime version, package exception and baseline result belong in `plans/evidence/monitoring-spikes.md`.
+When collecting local acceptance evidence, record the command, working directory, Python version, any dependency substitutions, and test results together with the generated reports.
 
 ## Warning and artifact policy
 
