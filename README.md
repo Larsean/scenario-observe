@@ -122,7 +122,7 @@ This creates a wheel and source archive under `dist/`. Publishing a GitHub Relea
 
 ## Record and render
 
-Decorate a synchronous or asynchronous scenario. By default, `trace` writes `.observe/trace.jsonl` and observes Python code under the current project directory. `include` can add symbols outside that directory; `exclude` takes precedence over both explicit includes and the default project scope.
+Decorate a synchronous or asynchronous scenario. By default, `trace` writes `.observe/trace.jsonl` and observes Python code under the current project directory. `include` can add symbols outside that directory; `exclude` takes precedence over both explicit includes and the default project scope. `exclude_paths` omits source files under the listed directories, even when a symbol matches `include`. Synthetic interpreter filenames such as `<frozen importlib._bootstrap>` are not treated as project files.
 
 Each recorded call includes its function's raw `docstring` (or `null` when absent). The HTML report shows it verbatim in the selected call's details; Google-style sections are not parsed or reformatted.
 

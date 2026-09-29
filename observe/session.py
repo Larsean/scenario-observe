@@ -69,6 +69,7 @@ class TraceSession:
         *,
         include=None,
         exclude=(),
+        exclude_paths=(),
         project_root=None,
         max_depth=12,
         max_calls=10_000,
@@ -90,6 +91,7 @@ class TraceSession:
         self.filter_policy = FilterPolicy(
             include=include,
             exclude=exclude,
+            exclude_paths=exclude_paths,
             project_root=project_root,
         )
         self.max_depth = max_depth

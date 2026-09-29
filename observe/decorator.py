@@ -201,6 +201,7 @@ def trace(
     output=".observe/trace.jsonl",
     include=None,
     exclude=(),
+    exclude_paths=(),
     project_root=None,
     max_depth=12,
     max_calls=10_000,
@@ -217,6 +218,7 @@ def trace(
         options = {
             "include": include,
             "exclude": exclude,
+            "exclude_paths": exclude_paths,
             "project_root": project_root,
             "max_depth": max_depth,
             "max_calls": max_calls,
